@@ -1,7 +1,7 @@
 {
-  "name": "tiny",
+  "name": "devguard-sdk",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/devguardian.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
