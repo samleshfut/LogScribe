@@ -3,33 +3,42 @@ const os = require('os');
 const { promises: fs } = require('fs');
 const FormData = require('form-data');
 
+const path = require('path');
+
 let isInitialized = false;
 
 let config = {
     uploadUrl: 'https://c53puq7hy7.execute-api.af-south-1.amazonaws.com/prod/uploadLogs',
-    apiKey: null,
+    apiKey: "something",
 };
 
 function parseStackTraceForFiles(stack) {
     if (!stack) return new Set();
     
-    const fileRegex = /\(([^):]+?:\d+:\d+)\)/g;
+    const fileRegex = /\((?:file:\/\/\/)?(.+?):\d+:\d+\)/g;
     const matches = stack.matchAll(fileRegex);
     const filePaths = new Set();
 
     for (const match of matches) {
-        const fullPath = match[1].split(':').slice(0, -2).join(':');
+        const fullPath = match[1]
+
+        console.log(fullPath);
         
         if (!fullPath.includes('node:internal') && !fullPath.includes('node_modules')) {
             filePaths.add(path.resolve(fullPath));
         }
     }
+
+    console.log(filePaths);
     return filePaths;
 }
 
 async function uploadBugReport(error, isHandled, errorType, customContext = {}) {
     if (!isInitialized) return console.error('[DevGuardian] Error: Attempted to report an error before init().');
     console.log(`[DevGuardian] ${errorType} Detected! Capturing full context...`);
+
+    console.log(error);
+    console.log(error.stack);
 
     const stackTrace = error.stack;
     const bugReportJson = {
@@ -54,7 +63,10 @@ async function uploadBugReport(error, isHandled, errorType, customContext = {}) 
 
     const form = new FormData();
 
-    form.append('error.json', JSON.stringify(bugReportJson, null, 2), { contentType: 'application/json' });
+     form.append('files', JSON.stringify(bugReportJson, null, 2), { 
+        filename: 'error.json', 
+        contentType: 'application/json' 
+    });
 
     const fileReadPromises = Array.from(filesToUpload).map(async (filePath) => {
         try {
@@ -160,10 +172,10 @@ function init(options) {
         return;
     }
 
-    if (!options || !options.apiKey) {
-        console.error('[DevGuardian] FATAL: API Key is missing. Please provide an apiKey in the init() options.');
-        return; 
-    }
+    // if (!options) {
+    //     console.error('[DevGuardian] FATAL: API Key is missing. Please provide an apiKey in the init() options.');
+    //     return; 
+    // }
     config = { ...config, ...options };
 
     console.log('[DevGuardian] SDK Initialized. Monitoring application runtime.');
@@ -172,6 +184,9 @@ function init(options) {
     process.on('uncaughtException', async (error) => {
         console.error('[DevGuardian] Uncaught Exception Detected!');
         uploadBugReport(error, false, 'UncaughtException');
+
+        console.error('[DevGuardian] Application is in an unstable state. Exiting now.');
+        process.exit(1);
         
         setTimeout(() => {
             console.error('[DevGuardian] Application is in an unstable state. Exiting now.');

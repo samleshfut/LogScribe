@@ -1,6 +1,6 @@
 {
-  "name": "devguard-cli",
-  "version": "1.0.0",
+  "name": "@devguardian/devguard-cli",
+  "version": "1.0.5",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -8,10 +8,14 @@
   "bin": {
     "devguardian": "./index.js"
   },
-  
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samleshfut/LogScribe.git",
+    "directory": "packages/devguard-cli"
+  },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "dependencies": {
     "chalk": "^5.6.0",

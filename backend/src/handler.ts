@@ -1,8 +1,8 @@
 // src/handler.ts
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { BugReportBundle } from './shared-types-and-objects/types';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION });
@@ -83,7 +83,7 @@ export const lintCode = async (event: any) => {
             return { statusCode: 200, body: "OK" };
         } else {
             return {
-                statusCode: 400, // Bad Request is a good signal for a linting error.
+                statusCode: 400, 
                 headers: { 'Access-Control-Allow-Origin': '*' },
                 body: aiResponse
             };
@@ -100,11 +100,14 @@ export const reviewPR = async (event: any) => {
         const diff = event.body;
         if (!diff) return { statusCode: 400, body: "No diff provided." };
 
-        const prompt = `
-            You are a helpful and constructive AI code reviewer. Analyze the following 'git diff' from a pull request.
-            Provide a brief, high-level summary of the changes. Then, if you spot any potential bugs, logical errors,
-            or areas for improvement, list them as bullet points using Markdown. If the changes look good, say so.
-            Keep your response concise and professional.
+       const prompt = `
+            You are an AI code reviewer for a GitHub Pull Request. Your task is to analyze the following 'git diff' and make a decision.
+            Provide your response ONLY in a valid JSON format with two keys: "decision" and "comment".
+
+            - "decision": A single, specific string. It must be either "REQUEST_CHANGES" or "COMMENT".
+              - Choose "REQUEST_CHANGES" if you find any potential bugs, logical errors, security vulnerabilities, or significant areas for improvement.
+              - Choose "COMMENT" if the changes are simple, safe, and have no obvious issues. DO NOT choose "APPROVE".
+            - "comment": Your review in GitHub Markdown. Provide a summary and use bullet points for specific feedback if you are requesting changes. If making a comment, provide a brief, positive summary.
 
             GIT DIFF:
             ---
