@@ -1,13 +1,24 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "dist/handler.js",
   "scripts": {
     "dev": "cross-env NODE_ENV=development nodemon --watch src --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "cross-env NODE_ENV=production node dist/index.js"
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "logs:bug": "serverless logs -f analyzeBug --tail",
+    "logs:lint": "serverless logs -f lintCode --tail",
+    "logs:review": "serverless logs -f reviewPR --tail"
   },
-  "keywords": [],
+  "keywords": [
+     "serverless",
+    "aws",
+    "lambda",
+    "bedrock",
+    "ai"
+  ],
   "author": "",
   "license": "ISC",
   "description": "",
@@ -18,9 +29,14 @@
     "cross-env": "^7.0.3",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "esbuild": "^0.20.2",
+    "serverless": "^3.38.0",
+    "serverless-esbuild": "^1.52.1"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.873.0",
+    "@aws-sdk/client-s3": "^3.873.0",
     "dotenv": "^16.6.1",
     "express": "^5.1.0"
   }
