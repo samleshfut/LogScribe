@@ -12,6 +12,45 @@ let config = {
     apiKey: "something",
 };
 
+function loadJiraConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return config.jira || null;
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load Jira configuration:', err.message);
+        return null;
+    }
+}
+
+function getJiraConfig() {
+    return loadJiraConfig();
+}
+
+async function testJiraConnection() {
+    const jiraConfig = loadJiraConfig();
+    if (!jiraConfig || !jiraConfig.apiKey) {
+        throw new Error('Jira configuration not found. Please run "devguardian config jira" first.');
+    }
+
+    try {
+        const response = await axios.get(`${jiraConfig.baseUrl}/rest/api/3/myself`, {
+            auth: {
+                username: jiraConfig.email,
+                password: jiraConfig.apiKey
+            }
+        });
+        return {
+            success: true,
+            user: response.data.displayName,
+            email: response.data.emailAddress
+        };
+    } catch (err) {
+        throw new Error(`Jira connection failed: ${err.message}`);
+    }
+}
+
 function parseStackTraceForFiles(stack) {
     if (!stack) return new Set();
     
@@ -208,5 +247,7 @@ function captureException(error, customContext = {}) {
 
 module.exports = {
     init,
-    captureException
+    captureException,
+    getJiraConfig,
+    testJiraConnection
 };
