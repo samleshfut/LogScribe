@@ -3,11 +3,15 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { BugReportBundle } from './shared-types-and-objects/types';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import axios from 'axios';
 
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION });
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const bedrockModelId = process.env.BEDROCK_MODEL_ID || "anthropic.claude-3-haiku-20240307-v1:0";
+const secretsManagerClient = new SecretsManagerClient({ region: process.env.AWS_REGION });
+
 
 
 async function getBedrockAnalysis(prompt: string): Promise<string> {
@@ -28,6 +32,17 @@ async function getBedrockAnalysis(prompt: string): Promise<string> {
     return responseBody.content[0].text;
 }
 
+let cachedGeminiApiKey: string | null = null;
+async function getGeminiApiKey(): Promise<string> {
+    if (cachedGeminiApiKey) return cachedGeminiApiKey;
+    const secretArn = process.env.GEMINI_API_KEY_SECRET_ARN!;
+    const command = new GetSecretValueCommand({ SecretId: secretArn });
+    const secretValue = await secretsManagerClient.send(command);
+    const secretJson = JSON.parse(secretValue.SecretString!);
+    cachedGeminiApiKey = secretJson.GEMINI_API_KEY;
+    if (!cachedGeminiApiKey) throw new Error("GEMINI_API_KEY not found in secret.");
+    return cachedGeminiApiKey;
+}
 
 export const analyzeBug = async (event: any) => {
     try {
@@ -101,25 +116,72 @@ export const reviewPR = async (event: any) => {
         if (!diff) return { statusCode: 400, body: "No diff provided." };
 
        const prompt = `
-            You are an AI code reviewer for a GitHub Pull Request. Your task is to analyze the following 'git diff' and make a decision.
-            Provide your response ONLY in a valid JSON format with two keys: "decision" and "comment".
+            You are an expert AI code reviewer. Analyze the following 'git diff'. Your task is to act like a real reviewer on GitHub.
+            Provide your response ONLY in a valid JSON format with two keys: "decision" and "comments".
 
-            - "decision": A single, specific string. It must be either "REQUEST_CHANGES" or "COMMENT".
-              - Choose "REQUEST_CHANGES" if you find any potential bugs, logical errors, security vulnerabilities, or significant areas for improvement.
-              - Choose "COMMENT" if the changes are simple, safe, and have no obvious issues. DO NOT choose "APPROVE".
-            - "comment": Your review in GitHub Markdown. Provide a summary and use bullet points for specific feedback if you are requesting changes. If making a comment, provide a brief, positive summary.
+            - "decision": A single string, either "REQUEST_CHANGES" or "COMMENT".
+              - Choose "REQUEST_CHANGES" if you find any specific, actionable issues in the code.
+              - Choose "COMMENT" if the code is good and has no issues.
+            - "comments": An array of objects. Each object represents a specific comment on a line of code and must have three keys:
+              - "path": The full file path of the file being commented on (e.g., "src/index.js").
+              - "line": The line number in the file where the change is.
+              - "body": Your comment for that specific line, written in concise GitHub Markdown.
+
+            Analyze the diff line by line. For each file, identify the line number of any potential bugs, security issues, or bad practices.
+
+            Example of a valid response:
+            {
+              "decision": "REQUEST_CHANGES",
+              "comments": [
+                {
+                  "path": "src/api/user.js",
+                  "line": 42,
+                  "body": "This API key is hardcoded. It should be loaded from an environment variable for security."
+                },
+                {
+                  "path": "src/utils/helpers.js",
+                  "line": 15,
+                  "body": "This function could be simplified by using the Array.prototype.map() method."
+                }
+              ]
+            }
+
+            If the code is perfect, return an empty "comments" array and a "decision" of "COMMENT".
 
             GIT DIFF:
             ---
             ${diff}
         `;
-        
-        const aiReview = await getBedrockAnalysis(prompt);
 
+        const apiKey = await getGeminiApiKey();
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+        const requestBody = {
+            contents: [{ parts: [{ "text": prompt }] }],
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            ],
+            generationConfig: {
+                responseMimeType: "application/json",
+            },
+        };
+        
+         console.log('Sending request to Gemini API...');
+        const response = await axios.post(geminiApiUrl, requestBody, { headers: { 'Content-Type': 'application/json' } });
+        
+        // 4. The response body itself should now be the JSON string we asked for
+        const aiReviewJson = response.data.candidates[0].content.parts[0].text;
+        
+        console.log("--- Gemini Review Generated ---");
+        console.log(aiReviewJson);
+        
         return {
             statusCode: 200,
             headers: { 'Access-Control-Allow-Origin': '*' },
-            body: aiReview
+            body: aiReviewJson
         };
     } catch (error) {
         console.error('Error in reviewPR handler:', error);
