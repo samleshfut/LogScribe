@@ -1,0 +1,66 @@
+service: devguardian-main-ai
+
+# Use the Serverless Framework v3.
+frameworkVersion: '3'
+
+plugins:
+  - serverless-esbuild
+
+provider:
+  name: aws
+  runtime: nodejs18.x 
+  region: us-east-1
+  
+  environment:
+    S3_BUCKET_NAME: your-unique-bug-report-bucket-name
+    BEDROCK_MODEL_ID: "anthropic.claude-3-haiku-20240307-v1:0"
+
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action: "s3:PutObject"
+          Resource: "arn:aws:s3:::our-unique-bug-report-bucket-name/*"
+        
+        - Effect: "Allow"
+          Action: "bedrock:InvokeModel"
+          Resource: "*"
+
+functions:
+  analyzeBug:
+    handler: src/handler.analyzeBug
+    timeout: 30
+    events:
+      - http:
+          path: /analyze-bug
+          method: post
+          cors: true
+
+  lintCode:
+    handler: src/handler.lintCode
+    timeout: 30
+    events:
+      - http:
+          path: /lint-code
+          method: post
+          cors: true
+
+  reviewPR:
+    handler: src/handler.reviewPR
+    timeout: 30
+    events:
+      - http:
+          path: /review-pr
+          method: post
+          cors: true
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude: ['aws-sdk'] 
+    target: 'node18'
+    define: { 'require.resolve': undefined }
+    platform: 'node'
+    concurrency: 10

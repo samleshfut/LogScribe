@@ -1,0 +1,30 @@
+{
+  "name": "@devguardian/sdk-node",
+  "version": "1.0.0",
+  "main": "src/devguardian.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samleshfut/LogScribe.git",
+    "directory": "packages/devguard-sdk"
+  },
+  "keywords": [
+    "error-reporting",
+    "bug-tracking",
+    "monitoring",
+    "ai",
+    "devguardian"
+  ],
+  "author": "My Name is",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.11.0",
+    "form-data": "^4.0.4",
+    "natural": "^8.1.0",
+    "node-notifier": "^10.0.1",
+    "yargs": "^17.7.2"
+  }
+}

@@ -3,7 +3,9 @@
 // --- 1. INITIALIZE DEVGUARDIAN ---
 // This is the most important step. It MUST be the first thing you require and run.
 const DevGuardian = require('devguard-sdk');
-DevGuardian.init();
+DevGuardian.init(
+    
+);
 
 // --- 2. SETUP A BASIC EXPRESS SERVER ---
 const express = require('express');

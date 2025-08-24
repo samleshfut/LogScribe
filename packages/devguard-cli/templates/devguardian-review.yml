@@ -1,0 +1,37 @@
+# templates/devguardian-review.yml
+
+name: DevGuardian AI Code Review
+on:
+  pull_request:
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Get PR Diff
+        id: pr_diff
+        run: |
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} > pr.diff
+          echo "✅ Diff saved to pr.diff"
+      - name: Send Diff to DevGuardian for Review
+        id: ai_review
+        run: |
+          echo "🤖 Sending diff to DevGuardian AI for review..."
+          AI_RESPONSE=$(curl -s -X POST --data-binary "@pr.diff" ${{ secrets.DEVGUARDIAN_REVIEW_URL }})
+          echo "review_comment=$AI_RESPONSE" >> $GITHUB_OUTPUT
+      - name: Post Review Comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const review = `${{ steps.ai_review.outputs.review_comment }}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### 🤖 DevGuardian AI Review\n\n${review}`
+            });
+            console.log("✅ AI review comment posted successfully.");
