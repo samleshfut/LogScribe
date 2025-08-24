@@ -1,7 +1,15 @@
 #!/bin/sh
 # templates/pre-commit-hook.sh
 
-DEVGUARDIAN_LINT_URL="https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/lint-code"
+DEVGUARDIAN_LINT_URL=$(git config --get devguardian.lintUrl)
+
+if [ -z "$DEVGUARDIAN_LINT_URL" ]; then
+  echo "❌ [DevGuardian] Error: Linter URL is not configured."
+  echo "   Please run 'devguardian init' or set it manually with:"
+  echo "   git config devguardian.lintUrl https://your-api-url.com/dev/lint-code"
+  exit 1
+fi
+
 echo "🤖 [DevGuardian Lint] Analyzing staged files..."
 STAGED_FILES=$(git diff --cached --name-only --filter=ACM | grep -E '\.(js|ts|jsx|tsx)$')
 if [ -z "$STAGED_FILES" ]; then

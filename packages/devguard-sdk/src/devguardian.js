@@ -3,27 +3,91 @@ const os = require('os');
 const { promises: fs } = require('fs');
 const FormData = require('form-data');
 
+const path = require('path');
+
 let isInitialized = false;
 
 let config = {
     uploadUrl: 'https://c53puq7hy7.execute-api.af-south-1.amazonaws.com/prod/uploadLogs',
-    apiKey: null,
+    apiKey: "something",
 };
+
+function loadProjectConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return {
+            project_id: config.project_id || null,
+            jira: config.jira || null
+        };
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load project configuration:', err.message);
+        return { project_id: null, jira: null };
+    }
+}
+
+function getProjectConfig() {
+    return loadProjectConfig();
+}
+
+function loadJiraConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return config.jira || null;
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load Jira configuration:', err.message);
+        return null;
+    }
+}
+
+function getJiraConfig() {
+    return loadJiraConfig();
+}
+
+async function testJiraConnection() {
+    const jiraConfig = loadJiraConfig();
+    if (!jiraConfig || !jiraConfig.apiKey) {
+        throw new Error('Jira configuration not found. Please run "devguardian config jira" first.');
+    }
+
+    try {
+        const response = await axios.get(`${jiraConfig.baseUrl}/rest/api/3/myself`, {
+            auth: {
+                username: jiraConfig.email,
+                password: jiraConfig.apiKey
+            }
+        });
+        return {
+            success: true,
+            user: response.data.displayName,
+            email: response.data.emailAddress
+        };
+    } catch (err) {
+        throw new Error(`Jira connection failed: ${err.message}`);
+    }
+}
 
 function parseStackTraceForFiles(stack) {
     if (!stack) return new Set();
     
-    const fileRegex = /\(([^):]+?:\d+:\d+)\)/g;
+    const fileRegex = /\((?:file:\/\/\/)?(.+?):\d+:\d+\)/g;
     const matches = stack.matchAll(fileRegex);
     const filePaths = new Set();
 
     for (const match of matches) {
-        const fullPath = match[1].split(':').slice(0, -2).join(':');
+        const fullPath = match[1]
+
+        console.log(fullPath);
         
         if (!fullPath.includes('node:internal') && !fullPath.includes('node_modules')) {
             filePaths.add(path.resolve(fullPath));
         }
     }
+
+    console.log(filePaths);
     return filePaths;
 }
 
@@ -31,9 +95,16 @@ async function uploadBugReport(error, isHandled, errorType, customContext = {}) 
     if (!isInitialized) return console.error('[DevGuardian] Error: Attempted to report an error before init().');
     console.log(`[DevGuardian] ${errorType} Detected! Capturing full context...`);
 
+    console.log(error);
+    console.log(error.stack);
+
     const stackTrace = error.stack;
+    
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+    
     const bugReportJson = {
-        apiKey: config.apiKey,
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -54,7 +125,10 @@ async function uploadBugReport(error, isHandled, errorType, customContext = {}) 
 
     const form = new FormData();
 
-    form.append('error.json', JSON.stringify(bugReportJson, null, 2), { contentType: 'application/json' });
+     form.append('files', JSON.stringify(bugReportJson, null, 2), { 
+        filename: 'error.json', 
+        contentType: 'application/json' 
+    });
 
     const fileReadPromises = Array.from(filesToUpload).map(async (filePath) => {
         try {
@@ -127,8 +201,11 @@ async function createBugReportBundle(error) {
     const { filePath, lineNumber } = parseStackTop(stackTrace);
     const codeSnippet = await getCodeSnippet(filePath, lineNumber);
 
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+
     return {
-        apiKey: config.apiKey, 
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -160,10 +237,10 @@ function init(options) {
         return;
     }
 
-    if (!options || !options.apiKey) {
-        console.error('[DevGuardian] FATAL: API Key is missing. Please provide an apiKey in the init() options.');
-        return; 
-    }
+    // if (!options) {
+    //     console.error('[DevGuardian] FATAL: API Key is missing. Please provide an apiKey in the init() options.');
+    //     return; 
+    // }
     config = { ...config, ...options };
 
     console.log('[DevGuardian] SDK Initialized. Monitoring application runtime.');
@@ -193,5 +270,8 @@ function captureException(error, customContext = {}) {
 
 module.exports = {
     init,
-    captureException
+    captureException,
+    getJiraConfig,
+    testJiraConnection,
+    getProjectConfig
 };

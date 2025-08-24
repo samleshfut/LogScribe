@@ -6,6 +6,11 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -17,21 +22,57 @@ jobs:
           git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} > pr.diff
           echo "✅ Diff saved to pr.diff"
       - name: Send Diff to DevGuardian for Review
-        id: ai_review
         run: |
           echo "🤖 Sending diff to DevGuardian AI for review..."
           AI_RESPONSE=$(curl -s -X POST --data-binary "@pr.diff" ${{ secrets.DEVGUARDIAN_REVIEW_URL }})
-          echo "review_comment=$AI_RESPONSE" >> $GITHUB_OUTPUT
-      - name: Post Review Comment
+          
+          # Use the official multi-line syntax to set an ENVIRONMENT variable
+          echo 'AI_JSON_RESPONSE<<EOF' >> $GITHUB_ENV
+          echo "$AI_RESPONSE" >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+      - name: Submit AI Review to Pull Request
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const review = `${{ steps.ai_review.outputs.review_comment }}`;
-            github.action.issues.createComment({
-              owner: context.repo.owner,
+            const aiJsonResponse = process.env.AI_JSON_RESPONSE;
+            // Parse the JSON to get the decision and comment.
+            let decision, comments, generalComment;
+
+            try {
+              const aiData = JSON.parse(aiJsonResponse.trim());
+              decision = aiData.decision;
+              // This is now an array of comment objects
+              comments = aiData.comments; 
+              generalComment = "DevGuardian AI has completed its review."; 
+            } catch (e) {
+              console.error("Failed to parse AI response:", e);
+              decision = 'COMMENT'; // Default to a simple comment on failure
+              comment = `The AI analysis returned an invalid format.\n\nRaw response:\n\`\`\`\n${aiJsonResponse}\n\`\`\``;
+            }
+
+            // Map our decision to the GitHub API's 'event' types.
+             let eventType;
+            if (decision === 'REQUEST_CHANGES') {
+              eventType = 'REQUEST_CHANGES';
+            } else {
+              eventType = 'COMMENT';
+            }
+
+            if (eventType === 'COMMENT' && (!comments || comments.length === 0)) {
+              generalComment = "DevGuardian AI has reviewed the changes and found no critical issues. Great work!";
+            }
+
+            console.log(`Submitting review with decision: ${eventType}`);
+
+            // Use the GitHub API to create a formal "Pull Request Review".
+            await github.rest.pulls.createReview({
+               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `### 🤖 DevGuardian AI Review\n\n${review}`
+              pull_number: context.issue.number,
+              event: eventType,
+              body: generalComment, // The main, top-level comment for the review
+              comments: comments   // The array of line-specific comments
             });
-            console.log("✅ AI review comment posted successfully.");
+            
+            console.log("✅ AI review submitted successfully.");
