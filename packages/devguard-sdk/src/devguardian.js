@@ -12,6 +12,64 @@ let config = {
     apiKey: "something",
 };
 
+function loadProjectConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return {
+            project_id: config.project_id || null,
+            jira: config.jira || null
+        };
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load project configuration:', err.message);
+        return { project_id: null, jira: null };
+    }
+}
+
+function getProjectConfig() {
+    return loadProjectConfig();
+}
+
+function loadJiraConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return config.jira || null;
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load Jira configuration:', err.message);
+        return null;
+    }
+}
+
+function getJiraConfig() {
+    return loadJiraConfig();
+}
+
+async function testJiraConnection() {
+    const jiraConfig = loadJiraConfig();
+    if (!jiraConfig || !jiraConfig.apiKey) {
+        throw new Error('Jira configuration not found. Please run "devguardian config jira" first.');
+    }
+
+    try {
+        const response = await axios.get(`${jiraConfig.baseUrl}/rest/api/3/myself`, {
+            auth: {
+                username: jiraConfig.email,
+                password: jiraConfig.apiKey
+            }
+        });
+        return {
+            success: true,
+            user: response.data.displayName,
+            email: response.data.emailAddress
+        };
+    } catch (err) {
+        throw new Error(`Jira connection failed: ${err.message}`);
+    }
+}
+
 function parseStackTraceForFiles(stack) {
     if (!stack) return new Set();
     
@@ -41,8 +99,12 @@ async function uploadBugReport(error, isHandled, errorType, customContext = {}) 
     console.log(error.stack);
 
     const stackTrace = error.stack;
+    
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+    
     const bugReportJson = {
-        apiKey: config.apiKey,
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -139,8 +201,11 @@ async function createBugReportBundle(error) {
     const { filePath, lineNumber } = parseStackTop(stackTrace);
     const codeSnippet = await getCodeSnippet(filePath, lineNumber);
 
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+
     return {
-        apiKey: config.apiKey, 
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -205,5 +270,8 @@ function captureException(error, customContext = {}) {
 
 module.exports = {
     init,
-    captureException
+    captureException,
+    getJiraConfig,
+    testJiraConnection,
+    getProjectConfig
 };
