@@ -12,6 +12,25 @@ let config = {
     apiKey: "something",
 };
 
+function loadProjectConfig() {
+    try {
+        const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
+        const configData = require('fs').readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        return {
+            project_id: config.project_id || null,
+            jira: config.jira || null
+        };
+    } catch (err) {
+        console.warn('[DevGuardian] Could not load project configuration:', err.message);
+        return { project_id: null, jira: null };
+    }
+}
+
+function getProjectConfig() {
+    return loadProjectConfig();
+}
+
 function loadJiraConfig() {
     try {
         const configPath = path.join(os.homedir(), '.devguardian', 'config.json');
@@ -80,8 +99,12 @@ async function uploadBugReport(error, isHandled, errorType, customContext = {}) 
     console.log(error.stack);
 
     const stackTrace = error.stack;
+    
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+    
     const bugReportJson = {
-        apiKey: config.apiKey,
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -178,8 +201,11 @@ async function createBugReportBundle(error) {
     const { filePath, lineNumber } = parseStackTop(stackTrace);
     const codeSnippet = await getCodeSnippet(filePath, lineNumber);
 
+    // Load project configuration to get project_id
+    const projectConfig = loadProjectConfig();
+
     return {
-        apiKey: config.apiKey, 
+        project_id: projectConfig.project_id, // Include project_id from CLI config
         errorMessage: error.message,
         errorName: error.name,
         stackTrace,
@@ -249,5 +275,6 @@ module.exports = {
     init,
     captureException,
     getJiraConfig,
-    testJiraConnection
+    testJiraConnection,
+    getProjectConfig
 };
