@@ -37,11 +37,14 @@ jobs:
           script: |
             const aiJsonResponse = process.env.AI_JSON_RESPONSE;
             // Parse the JSON to get the decision and comment.
-            let decision, comment;
+            let decision, comments, generalComment;
+
             try {
               const aiData = JSON.parse(aiJsonResponse.trim());
               decision = aiData.decision;
-              comment = aiData.comment;
+              // This is now an array of comment objects
+              comments = aiData.comments; 
+              generalComment = "DevGuardian AI has completed its review."; 
             } catch (e) {
               console.error("Failed to parse AI response:", e);
               decision = 'COMMENT'; // Default to a simple comment on failure
@@ -56,15 +59,20 @@ jobs:
               eventType = 'COMMENT';
             }
 
+            if (eventType === 'COMMENT' && (!comments || comments.length === 0)) {
+              generalComment = "DevGuardian AI has reviewed the changes and found no critical issues. Great work!";
+            }
+
             console.log(`Submitting review with decision: ${eventType}`);
 
             // Use the GitHub API to create a formal "Pull Request Review".
             await github.rest.pulls.createReview({
-              owner: context.repo.owner,
+               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
-              event: eventType, // This is the crucial part: APPROVE, REQUEST_CHANGES, or COMMENT
-              body: `### 🤖 DevGuardian AI Review\n\n${comment}`
+              event: eventType,
+              body: generalComment, // The main, top-level comment for the review
+              comments: comments   // The array of line-specific comments
             });
             
             console.log("✅ AI review submitted successfully.");
