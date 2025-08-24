@@ -184,9 +184,6 @@ function init(options) {
     process.on('uncaughtException', async (error) => {
         console.error('[DevGuardian] Uncaught Exception Detected!');
         uploadBugReport(error, false, 'UncaughtException');
-
-        console.error('[DevGuardian] Application is in an unstable state. Exiting now.');
-        process.exit(1);
         
         setTimeout(() => {
             console.error('[DevGuardian] Application is in an unstable state. Exiting now.');
